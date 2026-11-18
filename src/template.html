@@ -865,7 +865,7 @@ function shareLink(){
   if (state.contrs.length) q.set("contr", state.contrs.join(","));
   const url = location.href.split(/[?#]/)[0] + "?" + q.toString();
   const locked = !!passOf(proj.live.file);
-  copy(url, (state.contrs.length ? `Ссылка скопирована — откроется сразу на «${state.contrs.join("», «")}»` : "Ссылка на проект скопирована") + (locked ? ". Пароль в ссылке нет — сообщите его отдельно" : ""));
+  copy(url, (state.contrs.length ? `Ссылка скопирована — откроется сразу на «${state.contrs.join("», «")}»` : "Ссылка на проект скопирована") + (locked ? ". Пароля в ссылке нет — сообщите его отдельно" : ""));
 }
 
 /* ===== Тема ===== */
