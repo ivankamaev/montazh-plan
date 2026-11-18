@@ -659,6 +659,11 @@ let liveT = 0, liveGen = 0, liveBusy = false, liveErr = null;
 const curProj = () => projects.find(p => p.id === state.proj);
 function saveProjects(){ store.set("mp.projects", projects.filter(p => p.id !== "builtin")); }
 const apiUrl = () => String(store.get("mp.api", "") || LIVE_API || "").trim();
+/* Пароль к онлайн-проекту проверяет скрипт-мост (свойство PASS_<ID> в Apps Script), приложение только
+   спрашивает его и хранит на этом устройстве. Сменили пароль в мосте — мост ответит auth, кэш таблицы стираем. */
+const passOf = file => (store.get("mp.pass", {}) || {})[file] || "";
+function setPass(file, v){ const m = store.get("mp.pass", {}) || {}; if (v) m[file] = v; else delete m[file]; store.set("mp.pass", m); }
+let passAsked = {};   // окно пароля открываем само один раз за сеанс на проект, дальше — из меню
 function fileIdFrom(s){
   s = String(s || "").trim();
   const m = s.match(/\/d\/([\w-]{20,})/) || s.match(/[?&]id=([\w-]{20,})/);
@@ -705,10 +710,15 @@ async function pullLive(proj, force){
   try{
     const since = proj.sheets && !force ? proj.modified || "" : "";
     let r;
-    try { r = await fetch(`${api}${api.includes("?") ? "&" : "?"}id=${encodeURIComponent(proj.live.file)}&since=${encodeURIComponent(since)}&t=${Date.now()}`, {cache: "no-store"}); }
+    const key = passOf(proj.live.file);
+    try { r = await fetch(`${api}${api.includes("?") ? "&" : "?"}id=${encodeURIComponent(proj.live.file)}&since=${encodeURIComponent(since)}${key ? "&key=" + encodeURIComponent(key) : ""}&t=${Date.now()}`, {cache: "no-store", referrerPolicy: "no-referrer"}); }
     catch(e){ throw new Error("нет связи со скриптом-мостом"); }
     if (!r.ok) throw new Error("скрипт-мост ответил ошибкой " + r.status);
     let j; try { j = await r.json(); } catch(e){ throw new Error("скрипт-мост ответил не тем (проверь, что у веб-приложения доступ «Все»)"); }
+    if (j.auth){   // нужен пароль / пароль неверный: прячем сохранённую копию таблицы, пока не введут верный
+      if (j.auth !== "locked"){ proj.sheets = null; proj.modified = null; proj.lists = null; saveProjects(); }
+      const e = new Error(j.error || "нужен пароль"); e.auth = j.auth; throw e;
+    }
     if (j.error) throw new Error(j.error);
     proj.checked = Date.now();
     if (j.unchanged) return false;
@@ -742,6 +752,10 @@ async function liveTick(){
       }
     } catch(e){
       liveErr = e.message || "ошибка";
+      if (e.auth && curProj() === proj){
+        if (!P.loading) loadProject();   // копия таблицы стёрта — перерисовать пустым
+        if (!passAsked[proj.id] && !$("#ov").classList.contains("on")){ passAsked[proj.id] = true; openPass(); }
+      }
       if (curProj() === proj && P.loading) renderAll();
     }
   }
@@ -756,7 +770,7 @@ async function forceSync(){   // кнопка «Синхронизировать
     await pullLive(proj, true); liveErr = null; saveProjects();
     if (curProj() === proj) reloadKeep();
     toast("Синхронизировано с таблицей");
-  } catch(e){ liveErr = e.message || "ошибка"; toast("Не удалось: " + liveErr); }
+  } catch(e){ liveErr = e.message || "ошибка"; if (e.auth && curProj() === proj){ loadProject(); openPass(); } else toast("Не удалось: " + liveErr); }
   b.classList.remove("spin"); renderLive();
   clearTimeout(liveT); liveGen++; liveT = setTimeout(liveTick, POLL_MS);
 }
@@ -770,7 +784,7 @@ function renderLive(){
   }
   el.className = "live on";
   el.title = liveErr ? "Нет связи с таблицей: " + liveErr + ". Показана последняя полученная версия." : "Данные из таблицы на Google Диске, проверяются каждые " + POLL_MS / 1000 + " с";
-  el.innerHTML = `<i class="ldot${liveErr ? " err" : liveBusy ? " busy" : ""}"></i>${liveErr ? "нет связи" : "онлайн"}${tt}${P && !P.loading ? " · " : ""}`;
+  el.innerHTML = `<i class="ldot${liveErr ? " err" : liveBusy ? " busy" : ""}"></i>${liveErr ? (/пароль/i.test(liveErr) ? "🔒 нужен пароль" : "нет связи") : "онлайн"}${tt}${P && !P.loading ? " · " : ""}`;
 }
 function openConnect(){
   const proj = curProj();
@@ -807,7 +821,42 @@ async function connectLive(){
     state.proj = proj.id; resetF(); save();
     closeSheet(); loadProject(); liveTick();
     toast(`Подключено: ${test.items.length} ${plural(test.items.length, "действие", "действия", "действий")}`);
-  }catch(e){ msg.style.color = ""; msg.textContent = "Не получилось: " + e.message; btn.disabled = false; renderLive(); }
+  }catch(e){
+    if (e.auth && e.auth !== "locked"){   // таблица под паролем — добавляем проект и сразу спрашиваем пароль
+      if (isNew) projects.push(proj);
+      saveProjects(); liveErr = e.message; state.proj = proj.id; resetF(); save();
+      loadProject(); passAsked[proj.id] = true; openPass(); return;
+    }
+    msg.style.color = ""; msg.textContent = "Не получилось: " + e.message; btn.disabled = false; renderLive();
+  }
+}
+function openPass(){
+  const proj = curProj(); if (!proj || !proj.live) return;
+  const wrong = /неверн/i.test(liveErr || "");
+  $("#sheet").innerHTML = `<button class="x" data-close>×</button><h2>🔒 Проект защищён паролем</h2>
+    <div class="hint" style="margin-top:4px">Пароль сообщает техдирекция. Его нужно ввести один раз — на этом устройстве он запомнится.</div>
+    <label class="fld">Пароль<input id="pIn" type="password" autocomplete="current-password" enterkeyhint="go"></label>
+    <button class="btnp" id="pGo">Открыть</button><div class="cmsg" id="pMsg">${wrong && passOf(proj.live.file) ? "Сохранённый пароль не подходит — возможно, его сменили." : ""}</div>`;
+  $("#ov").classList.add("on");
+  setTimeout(() => { const i = $("#pIn"); if (i) i.focus(); }, 50);
+}
+async function submitPass(){
+  const proj = curProj(), inp = $("#pIn"), msg = $("#pMsg"), btn = $("#pGo");
+  if (!proj || !proj.live || !inp) return;
+  const v = inp.value;
+  if (!v){ msg.textContent = "Введите пароль"; return; }
+  const old = passOf(proj.live.file);
+  setPass(proj.live.file, v);
+  btn.disabled = true; msg.style.color = "var(--muted)"; msg.textContent = "Проверяю…";
+  try{
+    await pullLive(proj, true);
+    liveErr = null; saveProjects(); closeSheet(); loadProject(); liveTick();
+    toast("Пароль принят");
+  }catch(e){
+    if (e.auth) setPass(proj.live.file, old);   // неверный — не запоминаем
+    msg.style.color = ""; msg.textContent = e.auth === "wrong" ? "Неверный пароль" : "Не получилось: " + e.message;
+    btn.disabled = false; inp.select(); renderLive();
+  }
 }
 function shareLink(){
   const proj = curProj(); if (!proj || !proj.live) return;
@@ -815,7 +864,8 @@ function shareLink(){
   if (apiUrl() && apiUrl() !== LIVE_API) q.set("api", apiUrl());
   if (state.contrs.length) q.set("contr", state.contrs.join(","));
   const url = location.href.split(/[?#]/)[0] + "?" + q.toString();
-  copy(url, state.contrs.length ? `Ссылка скопирована — откроется сразу на «${state.contrs.join("», «")}»` : "Ссылка на проект скопирована");
+  const locked = !!passOf(proj.live.file);
+  copy(url, (state.contrs.length ? `Ссылка скопирована — откроется сразу на «${state.contrs.join("», «")}»` : "Ссылка на проект скопирована") + (locked ? ". Пароль в ссылке нет — сообщите его отдельно" : ""));
 }
 
 /* ===== Тема ===== */
@@ -861,7 +911,7 @@ const ccolor = c => ALERT_RE.test(c) ? ALERT_COLOR : isAll(c) ? "#9097a3" : (CON
 function renderHeader(){
   $("#proj").innerHTML = projects.map(p => `<option value="${esc(p.id)}"${p.id === state.proj ? " selected" : ""}>${esc(p.name)}</option>`).join("") +
     `<option value="__live">＋ Подключить монтажный план Online (Google Таблицы)…</option><option value="__import">＋ Загрузить монтажный план из файла (Microsoft Excel)…</option>` +
-    (curProj() && curProj().live ? `<option value="__share">🔗 Скопировать ссылку на проект</option>` : "") +
+    (curProj() && curProj().live ? `<option value="__share">🔗 Скопировать ссылку на проект</option><option value="__pass">🔑 Ввести пароль проекта…</option>` : "") +
     (state.proj !== "builtin" ? `<option value="__delete">✕ Удалить этот проект</option>` : "");
   renderLive();
   $("#syncBtn").style.display = curProj() && curProj().live ? "" : "none";
@@ -1185,7 +1235,7 @@ async function importFile(f){
 
 /* ===== События ===== */
 document.addEventListener("click", e => {
-  const t = e.target.closest("[data-day],[data-zone],[data-contr],[data-gate],[data-id],[data-pick],[data-zoom],[data-close],.tab,[data-tronly],#grpBtn,#fBtn,#themeBtn,#warnBtn,#impBtn,#cpXls,#cpTxt,#cGo,#syncBtn,[data-fopen],[data-grp],[data-freset]");
+  const t = e.target.closest("[data-day],[data-zone],[data-contr],[data-gate],[data-id],[data-pick],[data-zoom],[data-close],.tab,[data-tronly],#grpBtn,#fBtn,#themeBtn,#warnBtn,#impBtn,#cpXls,#cpTxt,#cGo,#pGo,#syncBtn,[data-fopen],[data-grp],[data-freset]");
   if (!t){ if (e.target.id === "ov") closeSheet(); return; }
   if (t.dataset.close != null) return closeSheet();
   if (t.classList.contains("tab")){ state.view = t.dataset.v; save(); return renderAll(); }
@@ -1214,6 +1264,7 @@ document.addEventListener("click", e => {
   if (t.id === "cpXls") return copyTrucks("xls");
   if (t.id === "cpTxt") return copyTrucks("txt");
   if (t.id === "cGo") return connectLive();
+  if (t.id === "pGo") return submitPass();
   if (t.id === "syncBtn") return forceSync();
   if (t.dataset.pick != null){ sel = +t.dataset.pick; applySel(false); return; }   // таймлайн: пустое место строки — выделить
   if (t.dataset.id != null && state.view === "gantt"){                       // таймлайн: текст названия — карточка, остальное — выделение
@@ -1234,6 +1285,7 @@ $("#proj").addEventListener("change", e => {
   if (v === "__import"){ e.target.value = state.proj; return openImport(); }
   if (v === "__live"){ e.target.value = state.proj; return openConnect(); }
   if (v === "__share"){ e.target.value = state.proj; return shareLink(); }
+  if (v === "__pass"){ e.target.value = state.proj; return openPass(); }
   if (v === "__delete"){
     projects = projects.filter(p => p.id !== state.proj);
     store.set("mp.projects", projects.filter(p => p.id !== "builtin"));
@@ -1242,7 +1294,7 @@ $("#proj").addEventListener("change", e => {
   } else state.proj = v;
   resetF(); save(); liveErr = null; loadProject(); liveTick();
 });
-document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.closest && e.target.closest("#cSheet,#cApi")) connectLive(); });
+document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.closest && e.target.closest("#cSheet,#cApi")) connectLive(); if (e.key === "Enter" && e.target.id === "pIn") submitPass(); });
 document.addEventListener("visibilitychange", () => { if (!document.hidden) liveTick(); });   // вернулись в приложение — сразу проверить таблицу
 /* ширина колонки работ */
 const lwKey = () => innerWidth <= 700 ? "lwM" : "lwD";

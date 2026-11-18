@@ -12,19 +12,38 @@
 // Пусто = любые файлы, к которым у служебного аккаунта есть доступ.
 const ALLOWED = ["11SofZ2n57scQpGyay51Vsle1KVxrkB3M"];   // ЛУКОЙЛ 35
 
-// Необязательный пароль. Если задан, в ссылке приложения нужно добавить &key=…
-const KEY = "";
+// Пароль к проекту. В коде его НЕТ (код лежит в открытом репозитории) — он хранится в настройках скрипта:
+// редактор Apps Script → ⚙ «Настройки проекта» → «Свойства скрипта» → «Добавить свойство»:
+//   PASS_<ID таблицы>  — пароль для одной таблицы, например PASS_11SofZ2n57scQpGyay51Vsle1KVxrkB3M
+//   PASS               — общий пароль для всех таблиц, у которых нет своего
+// Нет ни того, ни другого — таблица открывается без пароля. Новую версию развёртывать не нужно: свойство действует сразу.
+// Приложение спрашивает пароль один раз и запоминает на устройстве; сменили пароль — у всех снова спросит.
+function passFor(id) {
+  const pr = PropertiesService.getScriptProperties();
+  return pr.getProperty("PASS_" + id) || pr.getProperty("PASS") || "";
+}
+const MAX_FAILS = 20;   // столько неверных паролей за 10 минут — дальше таблица временно не открывается (защита от перебора)
 
 function doGet(e) {
   const p = (e && e.parameter) || {};
   try {
-    if (KEY && p.key !== KEY) return out({ error: "Неверный ключ" });
     const id = String(p.id || "").trim();
     if (!id) return out({ ok: true, msg: "Монтажный план: мост работает" });
     if (ALLOWED.length && ALLOWED.indexOf(id) < 0) return out({ error: "Эта таблица не разрешена в скрипте (ALLOWED)" });
 
-    // Время изменения кэшируем на 10 секунд, чтобы много открытых телефонов не дёргали Диск
     const cache = CacheService.getScriptCache();
+    const pass = passFor(id);
+    if (pass) {
+      const fk = "f:" + id, fails = Number(cache.get(fk) || 0);
+      if (fails >= MAX_FAILS) return out({ error: "Слишком много неверных паролей, попробуйте через 10 минут", auth: "locked" });
+      const key = String(p.key || "");
+      if (key !== pass) {
+        if (key) cache.put(fk, String(fails + 1), 600);
+        return out({ error: key ? "Неверный пароль" : "Нужен пароль", auth: key ? "wrong" : "need" });
+      }
+    }
+
+    // Время изменения кэшируем на 10 секунд, чтобы много открытых телефонов не дёргали Диск
     let meta = cache.get("m:" + id);
     if (meta) meta = JSON.parse(meta);
     else {
