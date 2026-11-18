@@ -290,6 +290,13 @@ body.resizing{cursor:col-resize;user-select:none;-webkit-user-select:none}
 .tag .dot{width:7px;height:7px;border-radius:50%}
 .tag.gate{color:var(--gate-fg);border-color:var(--gate-line);background:var(--gate-bg)}
 .tag.gate.right{margin-left:auto}
+/* цветные плашки зон разгрузки (GATE_COLORS, как в выпадающем списке Google): светлая тема — как в Google, тёмная — приглушённый фон */
+.gtag{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:500;padding:2px 9px;border-radius:999px;white-space:nowrap;
+  background:color-mix(in srgb,var(--gc) 32%,#15181d);color:color-mix(in srgb,var(--gb) 80%,#fff);border:0}
+[data-theme="light"] .gtag{background:var(--gb);color:var(--gc)}
+.gtag.right{margin-left:auto}
+.chip.gtag{font-size:13px;padding:5px 12px;opacity:.75}
+.chip.gtag.on{opacity:1;box-shadow:0 0 0 2px var(--text)}
 .tag.all{border-style:dashed}
 .card .cmt{grid-column:2;font-size:12.5px;color:var(--cmt);display:flex;gap:6px}
 .cont{grid-column:2;font-size:12px;color:var(--accent)}
@@ -546,7 +553,7 @@ function parseProject(proj){
     if (!contractors.length) warnings.push({row: xl, text: `«${action}»: не указан исполнитель.`});
     items.push({
       row: xl, rows: [xl], action: String(action).trim(), places, contractors, gate, comment, start, end, point,
-      truck: !!gate, out: /^(выезд|вывоз|погрузк|отъезд)/i.test(String(action).trim())
+      truck: !!gate, out: /^(выезд|вывоз|погрузк|отъезд)/i.test(String(action).trim()) || /за\s+кофр/i.test(String(action))   // «Заезд за кофрами» — машина забирает, это выезд
     });
   }
 
@@ -900,6 +907,20 @@ const orderC = it => {   // выбранные в фильтре исполни�
 };
 /* Цвета исполнителей — как в выпадающем списке Google-таблицы (насыщеннее, чтобы на полосах читался текст).
    Исполнители, у которых в Google серый цвет, получили свои разные цвета. Кого здесь нет — цвет из палитры по порядку. */
+/* Цвета зон разгрузки — из выпадающего списка Google-таблицы: [фон, текст]. Ключ — название в нижнем регистре. */
+const GATE_COLORS = {
+  "10 подъезд - монтажные ворота - грузовой лифт": ["#d4edbc", "#11734b"],
+  "10 подъезд - монтажные ворота - пассажирский лифт": ["#ffe5a0", "#473821"],
+  "13 подъезд - лестница": ["#ffcfc9", "#b10202"],
+  "3 подъезд - служебный вход": ["#bfe1f6", "#0a53a8"],
+  "центральный вход": ["#e6cff2", "#5a3286"]
+};
+const gateKey = g => norm(g).replace(/\s*[-–—]\s*/g, " - ");
+const gateStyle = g => { const c = GATE_COLORS[gateKey(g)]; return c ? ` style="--gb:${c[0]};--gc:${c[1]}"` : ""; };
+// плашка зоны: известная зона — цветная, иначе прежняя жёлтая
+const gateTag = (g, cls = "", icon = "") => GATE_COLORS[gateKey(g)]
+  ? `<span class="gtag ${cls}"${gateStyle(g)}>${icon}${esc(g)}</span>`
+  : `<span class="tag gate ${cls}">${icon}${esc(g)}</span>`;
 const CONTR_COLORS = {
   "купер": "#1e88e5", "mmg": "#e53935", "led group": "#43a047", "bss": "#6d4c41", "emotion production": "#f2b600",
   "a-pro": "#8e6bd8", "intercomm systems": "#64b5f6", "decor factory": "#f4743b", "гкд": "#1f45a8",
@@ -1123,7 +1144,7 @@ function renderList(vis){
 function tagsHtml(it, showZone = true){
   return (showZone ? it.places : []).map(p => `<span class="tag${isAll(p) ? " all" : ""}">${esc(p)}</span>`).join("") +
     orderC(it).map(c => `<span class="tag${isAll(c) ? " all" : ""}"><span class="dot" style="background:${ccolor(c)}"></span>${esc(c)}</span>`).join("") +
-    (it.gate ? `<span class="tag gate right">${TRUCK_SVG.replace("<svg", '<svg width="12" height="12"')}${esc(it.gate)}</span>` : "");
+    (it.gate ? gateTag(it.gate, "right", TRUCK_SVG.replace("<svg", '<svg width="12" height="12"')) : "");
 }
 const hl = s => { const e = esc(s); if (!query) return e; const i = norm(s).indexOf(query); if (i < 0) return e;
   const raw = String(s); return esc(raw.slice(0, i)) + "<mark>" + esc(raw.slice(i, i + query.length)) + "</mark>" + esc(raw.slice(i + query.length)); };
@@ -1136,7 +1157,7 @@ function truckRows(vis){
 function renderTrucks(vis){
   const el = $("#v-trucks");
   const rows = truckRows(vis);
-  const g = (v, l) => `<button class="chip${state.gate === v ? " on" : ""}" data-gate="${esc(v)}">${esc(l)}</button>`;
+  const g = (v, l) => `<button class="chip${v !== "*" && GATE_COLORS[gateKey(v)] ? " gtag" : ""}${state.gate === v ? " on" : ""}" data-gate="${esc(v)}"${v === "*" ? "" : gateStyle(v)}>${esc(l)}</button>`;
   let html = `<div class="list" style="max-width:1100px"><div class="tbar">${g("*", "Все зоны разгрузки")}${P.lists.gates.map(v => g(v, v)).join("")}<span class="sp"></span>
     <button class="iconbtn" id="cpXls">Копировать для Excel</button><button class="iconbtn" id="cpTxt">Копировать текстом</button></div>`;
   if (!rows.length){ el.innerHTML = html + `<div class="empty">Заездов под выбранные фильтры нет</div></div>`; return; }
@@ -1147,7 +1168,7 @@ function renderTrucks(vis){
     if (d !== cur){ cur = d; html += `<tr class="dayrow"><td colspan="7"><div class="dh"><span class="zdot"></span>${wd(d)}, ${dayTitle(d)}</div></td></tr>`; }
     html += `<tr class="r" data-id="${it.id}"><td class="tm">${span(it)}</td>
       <td><span class="kind${it.out ? " out" : ""}">${it.out ? "Выезд" : "Заезд"}</span></td>
-      <td>${esc(it.gate)}</td><td>${esc(it.contractors.join(", "))}</td><td>${esc(it.action)}</td>
+      <td>${gateTag(it.gate)}</td><td>${esc(it.contractors.join(", "))}</td><td>${esc(it.action)}</td>
       <td class="hide-m">${esc(it.places.join(", "))}</td><td class="hide-m">${esc(it.comment)}</td></tr>`;
   }
   el.innerHTML = html + `</tbody></table><div class="hint">«Копировать для Excel» — вставь в пустой лист Excel или Google Таблиц, колонки разложатся сами. «Копировать текстом» — для мессенджера.</div></div>`;
@@ -1192,7 +1213,7 @@ function openItem(id){
     <div style="color:var(--muted)">${wd(it.start)}, ${dayTitle(it.start)}${multi ? ` → ${wd(it.end)}, ${dayTitle(it.end)}` : ""}</div>${daysTxt}
     <dl class="kv">
       <dt>Локация</dt><dd>${esc(it.places.join(", ")) || "—"}</dd>
-      ${it.gate ? `<dt>Зона разгрузки</dt><dd class="gate"><b style="color:var(--gate-fg)">${esc(it.gate)}</b> · ${it.out ? "выезд" : "заезд"}</dd>` : ""}
+      ${it.gate ? `<dt>Зона разгрузки</dt><dd class="gate">${gateTag(it.gate)} · ${it.out ? "выезд" : "заезд"}</dd>` : ""}
       <dt>Исполнители</dt><dd><div class="tags" style="grid-column:auto">${it.contractors.map(c => `<span class="tag${isAll(c) ? " all" : ""}"><span class="dot" style="background:${ccolor(c)}"></span>${esc(c)}</span>`).join("") || "—"}</div></dd>
       <dt>В таблице</dt><dd style="color:var(--muted)">строка ${it.rows.join(" и ")}${it.rows.length > 1 ? " (дубль на следующий день склеен)" : ""}</dd>
     </dl>
