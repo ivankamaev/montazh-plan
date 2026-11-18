@@ -753,7 +753,7 @@ async function liveTick(){
     } catch(e){
       liveErr = e.message || "ошибка";
       if (e.auth && curProj() === proj){
-        if (!P.loading) loadProject();   // копия таблицы стёрта — перерисовать пустым
+        loadProject();   // копия таблицы стёрта — перерисовать пустым, в меню появится «Ввести пароль»
         if (!passAsked[proj.id] && !$("#ov").classList.contains("on")){ passAsked[proj.id] = true; openPass(); }
       }
       if (curProj() === proj && P.loading) renderAll();
@@ -911,7 +911,8 @@ const ccolor = c => ALERT_RE.test(c) ? ALERT_COLOR : isAll(c) ? "#9097a3" : (CON
 function renderHeader(){
   $("#proj").innerHTML = projects.map(p => `<option value="${esc(p.id)}"${p.id === state.proj ? " selected" : ""}>${esc(p.name)}</option>`).join("") +
     `<option value="__live">＋ Подключить монтажный план Online (Google Таблицы)…</option><option value="__import">＋ Загрузить монтажный план из файла (Microsoft Excel)…</option>` +
-    (curProj() && curProj().live ? `<option value="__share">🔗 Скопировать ссылку на проект</option><option value="__pass">🔑 Ввести пароль проекта…</option>` : "") +
+    (curProj() && curProj().live ? `<option value="__share">🔗 Скопировать ссылку на проект</option>` : "") +
+    (curProj() && curProj().live && /пароль/i.test(liveErr || "") ? `<option value="__pass">🔑 Ввести пароль проекта…</option>` : "") +   // только пока проект ждёт пароль
     (state.proj !== "builtin" ? `<option value="__delete">✕ Удалить этот проект</option>` : "");
   renderLive();
   $("#syncBtn").style.display = curProj() && curProj().live ? "" : "none";
