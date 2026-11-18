@@ -22,7 +22,6 @@ function passFor(id) {
   const pr = PropertiesService.getScriptProperties();
   return pr.getProperty("PASS_" + id) || pr.getProperty("PASS") || "";
 }
-const MAX_FAILS = 20;   // столько неверных паролей за 10 минут — дальше таблица временно не открывается (защита от перебора)
 
 function doGet(e) {
   const p = (e && e.parameter) || {};
@@ -34,13 +33,8 @@ function doGet(e) {
     const cache = CacheService.getScriptCache();
     const pass = passFor(id);
     if (pass) {
-      const fk = "f:" + id, fails = Number(cache.get(fk) || 0);
-      if (fails >= MAX_FAILS) return out({ error: "Слишком много неверных паролей, попробуйте через 10 минут", auth: "locked" });
       const key = String(p.key || "");
-      if (key !== pass) {
-        if (key) cache.put(fk, String(fails + 1), 600);
-        return out({ error: key ? "Неверный пароль" : "Нужен пароль", auth: key ? "wrong" : "need" });
-      }
+      if (key !== pass) return out({ error: key ? "Неверный пароль" : "Нужен пароль", auth: key ? "wrong" : "need" });
     }
 
     // Время изменения кэшируем на 10 секунд, чтобы много открытых телефонов не дёргали Диск
