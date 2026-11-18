@@ -955,7 +955,7 @@ function renderAll(){
   document.querySelectorAll(".view").forEach(v => v.classList.toggle("on", v.id === "v-" + state.view));
   const vis = visible();
   const nTr = P.items.filter(i => i.truck).length;
-  $("#stats").textContent = `${dm(P.min)}–${dm(P.max - DAY)} · ${P.items.length} ${plural(P.items.length, "действие", "действия", "действий")} · ${nTr} заездов/выездов` + (vis.length !== P.items.length ? ` · показано ${vis.length}` : "");
+  $("#stats").textContent = P.loading ? "" : `${dm(P.min)}–${dm(P.max - DAY)} · ${P.items.length} ${plural(P.items.length, "действие", "действия", "действий")} · ${nTr} заездов/выездов` + (vis.length !== P.items.length ? ` · показано ${vis.length}` : "");
   $("#tcnt").textContent = vis.filter(i => i.truck).length || "";
   if (state.view === "gantt") renderGantt(vis);
   else if (state.view === "list") renderList(vis);
