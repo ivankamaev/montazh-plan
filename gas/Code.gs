@@ -1,0 +1,71 @@
+/**
+ * Монтажный план — мост между Google Диском и приложением.
+ *
+ * Работает под служебным Google-аккаунтом, которому рук-про дал доступ к таблице (хватит «Читатель»).
+ * Приложение спрашивает:  …/exec?id=<ID файла>&since=<время последней версии>
+ *   — если таблица не менялась, ответ короткий: {unchanged:true}
+ *   — если менялась — вся таблица в формате .xlsx (base64) и время изменения.
+ * Подходит и «настоящая» Google Таблица, и файл .xlsx/.xlsm, который открывают в Google Таблицах.
+ */
+
+// ID файлов, которые мост может отдавать (часть ссылки между /d/ и /edit).
+// Пусто = любые файлы, к которым у служебного аккаунта есть доступ.
+const ALLOWED = ["11SofZ2n57scQpGyay51Vsle1KVxrkB3M"];   // ЛУКОЙЛ 35
+
+// Необязательный пароль. Если задан, в ссылке приложения нужно добавить &key=…
+const KEY = "";
+
+function doGet(e) {
+  const p = (e && e.parameter) || {};
+  try {
+    if (KEY && p.key !== KEY) return out({ error: "Неверный ключ" });
+    const id = String(p.id || "").trim();
+    if (!id) return out({ ok: true, msg: "Монтажный план: мост работает" });
+    if (ALLOWED.length && ALLOWED.indexOf(id) < 0) return out({ error: "Эта таблица не разрешена в скрипте (ALLOWED)" });
+
+    // Время изменения кэшируем на 10 секунд, чтобы много открытых телефонов не дёргали Диск
+    const cache = CacheService.getScriptCache();
+    let meta = cache.get("m:" + id);
+    if (meta) meta = JSON.parse(meta);
+    else {
+      const f = DriveApp.getFileById(id);
+      meta = { modified: f.getLastUpdated().toISOString(), name: f.getName(), mime: f.getMimeType() };
+      cache.put("m:" + id, JSON.stringify(meta), 10);
+    }
+    if (p.since && p.since === meta.modified) return out({ unchanged: true, modified: meta.modified, name: meta.name });
+
+    const blob = getXlsx(id, meta.mime);
+    return out({ modified: meta.modified, name: meta.name, mime: meta.mime, data: Utilities.base64Encode(blob.getBytes()) });
+  } catch (err) {
+    const m = String((err && err.message) || err);
+    if (/not found|не найден|access|доступ/i.test(m)) return out({ error: "У служебного аккаунта нет доступа к этому файлу" });
+    return out({ error: m });
+  }
+}
+
+function getXlsx(id, mime) {
+  if (mime === MimeType.GOOGLE_SHEETS) {
+    // настоящая Google Таблица — выгружаем её как .xlsx
+    const r = UrlFetchApp.fetch("https://docs.google.com/spreadsheets/d/" + id + "/export?format=xlsx", {
+      headers: { Authorization: "Bearer " + ScriptApp.getOAuthToken() },
+      muteHttpExceptions: true
+    });
+    if (r.getResponseCode() !== 200) throw new Error("Google не отдал таблицу (код " + r.getResponseCode() + ")");
+    return r.getBlob();
+  }
+  // файл Excel на Диске — отдаём как есть
+  return DriveApp.getFileById(id).getBlob();
+}
+
+function out(o) {
+  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/** Запусти один раз вручную (кнопка «Выполнить»), чтобы Google спросил разрешения.
+ *  Подставь ID таблицы — в журнале появится имя файла и время изменения. */
+function test() {
+  const ID = "11SofZ2n57scQpGyay51Vsle1KVxrkB3M";   // ЛУКОЙЛ 35
+  const res = JSON.parse(doGet({ parameter: { id: ID } }).getContent());
+  Logger.log(res.error || (res.name + " · изменён " + res.modified + " · " + Math.round((res.data || "").length * 0.75 / 1024) + " КБ"));
+  UrlFetchApp.fetch("https://www.google.com", { muteHttpExceptions: true }); // чтобы сразу выдать разрешение на внешние запросы
+}

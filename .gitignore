@@ -1,0 +1,9 @@
+site/
+index.html
+__pycache__/
+.DS_Store
+data/
+*.xlsx
+*.xlsm
+.claude/
+.tools/
