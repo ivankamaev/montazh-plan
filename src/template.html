@@ -311,6 +311,8 @@ table.tt{width:100%;border-collapse:collapse;font-size:13.5px}
 .tt tr.r{cursor:pointer}
 .tt tr.r:hover td{background:var(--hover)}
 .tt td.tm{font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}
+.tt td.gcell{width:170px;max-width:170px}   /* узкая колонка зоны: длинное название переносится внутри плашки */
+.tt td.gcell .gtag,.tt td.gcell .tag{white-space:normal;border-radius:8px;line-height:1.3}
 .kind{display:inline-block;font-size:11px;font-weight:700;padding:2px 7px;border-radius:5px;background:var(--kind-in);color:var(--truck)}
 .kind.out{background:var(--kind-out-bg);color:var(--kind-out)}
 .tt .dayrow td{position:sticky;top:0;z-index:2;padding:0;border:0;background:var(--bg)}
@@ -1161,14 +1163,14 @@ function renderTrucks(vis){
   let html = `<div class="list" style="max-width:1100px"><div class="tbar">${g("*", "Все зоны разгрузки")}${P.lists.gates.map(v => g(v, v)).join("")}<span class="sp"></span>
     <button class="iconbtn" id="cpXls">Копировать для Excel</button><button class="iconbtn" id="cpTxt">Копировать текстом</button></div>`;
   if (!rows.length){ el.innerHTML = html + `<div class="empty">Заездов под выбранные фильтры нет</div></div>`; return; }
-  html += `<table class="tt"><thead><tr><th>Время</th><th>Тип</th><th>Зона разгрузки</th><th>Исполнитель</th><th>Что</th><th>Локация</th><th>Комментарий</th></tr></thead><tbody>`;
+  html += `<table class="tt"><thead><tr><th>Время</th><th>Тип</th><th>Зона разгрузки</th><th>Исполнитель</th><th>Действие</th><th>Локация</th><th>Комментарий</th></tr></thead><tbody>`;
   let cur = null;
   for (const it of rows){
     const d = dayOf(it.start);
     if (d !== cur){ cur = d; html += `<tr class="dayrow"><td colspan="7"><div class="dh"><span class="zdot"></span>${wd(d)}, ${dayTitle(d)}</div></td></tr>`; }
     html += `<tr class="r" data-id="${it.id}"><td class="tm">${span(it)}</td>
       <td><span class="kind${it.out ? " out" : ""}">${it.out ? "Выезд" : "Заезд"}</span></td>
-      <td>${gateTag(it.gate)}</td><td>${esc(it.contractors.join(", "))}</td><td>${esc(it.action)}</td>
+      <td class="gcell">${gateTag(it.gate)}</td><td>${esc(it.contractors.join(", "))}</td><td>${esc(it.action)}</td>
       <td class="hide-m">${esc(it.places.join(", "))}</td><td class="hide-m">${esc(it.comment)}</td></tr>`;
   }
   el.innerHTML = html + `</tbody></table><div class="hint">«Копировать для Excel» — вставь в пустой лист Excel или Google Таблиц, колонки разложатся сами. «Копировать текстом» — для мессенджера.</div></div>`;
@@ -1177,7 +1179,7 @@ function copyTrucks(kind){
   const rows = truckRows(visible());
   let txt;
   if (kind === "xls"){
-    txt = ["Дата\tНачало\tОкончание\tТип\tЗона разгрузки\tИсполнитель\tЧто\tЛокация\tКомментарий"].concat(rows.map(it =>
+    txt = ["Дата\tНачало\tОкончание\tТип\tЗона разгрузки\tИсполнитель\tДействие\tЛокация\tКомментарий"].concat(rows.map(it =>
       [dm(it.start), it.point === "end" ? "" : hm(it.start), it.point === "start" ? "" : it.point ? hm(it.start) : hm(it.end), it.out ? "Выезд" : "Заезд", it.gate, it.contractors.join(" / "), it.action, it.places.join(" / "), it.comment]
         .map(v => String(v).replace(/[\t\n]/g, " ")).join("\t"))).join("\n");
   } else {
