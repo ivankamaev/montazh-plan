@@ -379,7 +379,7 @@ table.tt{width:100%;border-collapse:collapse;font-size:13.5px}
   <button class="iconbtn" id="syncBtn" data-tip="Синхронизировать с Google Таблицей" aria-label="Синхронизировать с Google Таблицей" style="display:none">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 13A8.5 8.5 0 0 1 5.6 18.4M3.5 11A8.5 8.5 0 0 1 18.4 5.6"/><path d="M18.5 2.5v3.6h-3.6M5.5 21.5v-3.6h3.6"/></svg>
   </button>
-  <button class="iconbtn" id="impBtn" data-tip="Загрузить таблицу Excel" aria-label="Загрузить таблицу Excel">
+  <button class="iconbtn" id="impBtn" data-tip="Загрузить монтажный план из файла (Microsoft Excel)" aria-label="Загрузить монтажный план из файла (Microsoft Excel)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12M7 8l5-5 5 5M4 17v3h16v-3"/></svg>
   </button>
   <button class="iconbtn" id="themeBtn" title="Светлая / тёмная тема" aria-label="Переключить тему">
@@ -774,7 +774,7 @@ function renderLive(){
 }
 function openConnect(){
   const proj = curProj();
-  $("#sheet").innerHTML = `<button class="x" data-close>×</button><h2>Подключить Google Таблицу</h2>
+  $("#sheet").innerHTML = `<button class="x" data-close>×</button><h2>Подключить монтажный план Online (Google Таблицы)</h2>
     <div class="hint" style="margin-top:4px">Приложение само заберёт таблицу с Google Диска и будет обновляться, когда в ней что-то меняют. Служебному Google-аккаунту, под которым работает скрипт-мост, нужен доступ к файлу (хватит «Читатель»).</div>
     <label class="fld">Ссылка на таблицу<input id="cSheet" placeholder="https://docs.google.com/spreadsheets/d/…" autocomplete="off" value="${proj && proj.live ? esc("https://docs.google.com/spreadsheets/d/" + proj.live.file) : ""}"></label>
     <label class="fld">Адрес скрипта-моста (заканчивается на /exec)<input id="cApi" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" value="${esc(apiUrl())}"></label>
@@ -784,7 +784,7 @@ function openConnect(){
 /* Выбор файла открываем настоящей кнопкой-<label>, а не file.click() из меню: Safari (Mac и iPhone)
    не считает смену пункта <select> нажатием пользователя и молча не показывает окно выбора файла. */
 function openImport(){
-  $("#sheet").innerHTML = `<button class="x" data-close>×</button><h2>Загрузить файл Excel</h2>
+  $("#sheet").innerHTML = `<button class="x" data-close>×</button><h2>Загрузить монтажный план из файла (Microsoft Excel)</h2>
     <div class="hint" style="margin-top:4px">Таблица .xlsx или .xlsm с листом, где есть колонки «Действие», «Время начала» и «Время окончания». Она сохранится как отдельный проект на этом устройстве.</div>
     <label class="btnp" for="file" style="display:inline-flex;align-items:center;cursor:pointer">Выбрать файл…</label>`;
   $("#ov").classList.add("on");
@@ -860,7 +860,7 @@ const ccolor = c => ALERT_RE.test(c) ? ALERT_COLOR : isAll(c) ? "#9097a3" : (CON
 
 function renderHeader(){
   $("#proj").innerHTML = projects.map(p => `<option value="${esc(p.id)}"${p.id === state.proj ? " selected" : ""}>${esc(p.name)}</option>`).join("") +
-    `<option value="__live">＋ Подключить Google Таблицу…</option><option value="__import">＋ Загрузить файл Excel…</option>` +
+    `<option value="__live">＋ Подключить монтажный план Online (Google Таблицы)…</option><option value="__import">＋ Загрузить монтажный план из файла (Microsoft Excel)…</option>` +
     (curProj() && curProj().live ? `<option value="__share">🔗 Скопировать ссылку на проект</option>` : "") +
     (state.proj !== "builtin" ? `<option value="__delete">✕ Удалить этот проект</option>` : "");
   renderLive();
