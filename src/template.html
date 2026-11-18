@@ -1160,7 +1160,7 @@ function renderTrucks(vis){
   const el = $("#v-trucks");
   const rows = truckRows(vis);
   const g = (v, l) => `<button class="chip${v !== "*" && GATE_COLORS[gateKey(v)] ? " gtag" : ""}${state.gate === v ? " on" : ""}" data-gate="${esc(v)}"${v === "*" ? "" : gateStyle(v)}>${esc(l)}</button>`;
-  let html = `<div class="list" style="max-width:1100px"><div class="tbar">${g("*", "Все зоны разгрузки")}${P.lists.gates.map(v => g(v, v)).join("")}<span class="sp"></span>
+  let html = `<div class="list" style="max-width:none"><div class="tbar">${g("*", "Все зоны разгрузки")}${P.lists.gates.map(v => g(v, v)).join("")}<span class="sp"></span>
     <button class="iconbtn" id="cpXls">Копировать для Excel</button><button class="iconbtn" id="cpTxt">Копировать текстом</button></div>`;
   if (!rows.length){ el.innerHTML = html + `<div class="empty">Заездов под выбранные фильтры нет</div></div>`; return; }
   html += `<table class="tt"><thead><tr><th>Время</th><th>Тип</th><th>Зона разгрузки</th><th>Исполнитель</th><th>Действие</th><th>Локация</th><th>Комментарий</th></tr></thead><tbody>`;
